@@ -4,6 +4,9 @@ use bevy::prelude::*;
 struct Background;
 
 #[derive(Component)]
+struct TextScore;
+
+#[derive(Component)]
 struct Column {
     passed: bool,
 }
@@ -21,7 +24,6 @@ struct ColumnTimer {
 
 #[derive(Resource)]
 struct GameState {
-    gap_height: f32,
     column_width: f32,
     column_speed: f32,
     min_height: f32,
@@ -32,7 +34,6 @@ struct GameState {
     game_score: f32,
 }
 
-const COLUMN_GAP: f32 = 300.0;
 const COLUMN_WIDTH: f32 = 80.0;
 const COLUMN_SPEED: f32 = -400.0;
 const SPAWN_INTERVAL: f32 = 1.5;
@@ -43,14 +44,23 @@ const JUMP_FORCE: f32 = 250.0;
 const BIRD_SIZE_WIDTH: f32 = 97.2;
 const BIRD_SIZE_HEIGHT: f32 = 128.0;
 
+fn generate_random_column_gap() -> f32 {
+    let min_height = 180.0;
+    let max_height = 400.0;
+
+    let random = rand::random::<f32>();
+
+    min_height + random * (max_height - min_height)
+}
+
 pub fn startup() {
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_resource(ColumnTimer {
             timer: Timer::from_seconds(SPAWN_INTERVAL, TimerMode::Repeating),
         })
+        .insert_resource(Time::<Fixed>::from_hz(60.0))
         .insert_resource(GameState {
-            gap_height: COLUMN_GAP,
             column_width: COLUMN_WIDTH,
             column_speed: COLUMN_SPEED,
             min_height: 100.0,
@@ -62,7 +72,7 @@ pub fn startup() {
         })
         .add_systems(Startup, setup)
         .add_systems(
-            Update,
+            FixedUpdate,
             (
                 spawn_columns,
                 move_columns,
@@ -71,39 +81,39 @@ pub fn startup() {
                 bird_input,
                 bird_movement,
                 check_collisions,
+                game_score_text_update,
                 restart_game,
             ),
         )
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    windows: Query<&mut Window>,
-    game_state: Res<GameState>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, windows: Query<&mut Window>) {
     let background_image = asset_server.load("background.png");
     let pos = Vec3::new(0., 0., 0.);
     let window = windows.single().unwrap();
     let text_justification = Justify::Left;
 
     commands
-        .spawn((Node {
-            position_type: PositionType::Absolute,
-            justify_content: JustifyContent::FlexStart,
-            overflow: Overflow::visible(),
-            max_width: Val::Px(0.0),
-            ..default()
-        },))
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                justify_content: JustifyContent::FlexStart,
+                overflow: Overflow::visible(),
+                max_width: Val::Px(0.0),
+                ..default()
+            },
+            Transform::from_translation(Vec3::new(0.0, 0.0, 100.0)), // zIndex через Transform
+        ))
         .with_children(|builder| {
             builder.spawn((
-                Text::new("Score: ".to_string() + &game_state.game_score.to_string()),
+                Text::new("Score: 0".to_string()),
                 TextFont::from_font_size(24.0),
                 TextLayout::new_with_justify(text_justification).with_no_wrap(),
-                // TextColor(text.color),
+                TextScore,
             ));
         });
+
     commands.spawn((
         Sprite {
             image: background_image,
@@ -162,6 +172,15 @@ fn bird_input(
                 bird.velocity = game_state.jump_force;
             }
         }
+    }
+}
+
+fn game_score_text_update(
+    game_state: Res<GameState>,
+    mut texts: Query<&mut Text, With<TextScore>>,
+) {
+    for mut text in &mut texts {
+        text.0 = format!("Score: {}", game_state.game_score as i32)
     }
 }
 
@@ -238,11 +257,13 @@ fn restart_game(
     birds: Query<(Entity, &Bird)>,
     columns: Query<Entity, With<Column>>,
     asset_server: Res<AssetServer>,
+    mut game_state: ResMut<GameState>,
 ) {
     let just_pressed_keys: Vec<KeyCode> = keyboard_input.get_just_pressed().cloned().collect();
     let game_active = birds.iter().any(|bird| bird.1.alive);
 
     if !just_pressed_keys.is_empty() && !game_active {
+        game_state.game_score = 0.0;
         for column_entity in &columns {
             commands.entity(column_entity).despawn();
         }
@@ -283,7 +304,7 @@ fn spawn_columns(
 
         let bottom_height = rand::random::<f32>() * (game_state.max_height - game_state.min_height)
             + game_state.min_height;
-        let top_height = window.height() - bottom_height - game_state.gap_height;
+        let top_height = window.height() - bottom_height - generate_random_column_gap();
 
         let spawn_x = window.width() / 2.0 + game_state.column_width / 2.0;
 
@@ -334,7 +355,7 @@ fn move_columns(
 
         if transform.translation.x < 0.0 && !column.passed {
             column.passed = true;
-            game_state.game_score = game_state.game_score + 1.0;
+            game_state.game_score = game_state.game_score + 0.5;
         }
     }
 }

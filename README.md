@@ -1,4 +1,5 @@
 # Flappy Yandex Rover
+![Demo](https://github.com/crustypub/flappy-yandex-rover/blob/master/gameplay.gif)
 
 A simple Flappy Bird-style game featuring a Yandex Rover as the main character. This game is built with the [Bevy engine](https://bevyengine.org/) in Rust. The goal is to navigate the rover through pairs of columns without colliding.
 

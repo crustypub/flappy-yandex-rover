@@ -7,6 +7,9 @@ struct Background;
 struct TextScore;
 
 #[derive(Component)]
+struct TextRestartGame;
+
+#[derive(Component)]
 struct Column {
     passed: bool,
 }
@@ -211,12 +214,14 @@ fn bird_movement(
 }
 
 fn check_collisions(
+    mut commands: Commands,
     mut birds: Query<(&mut Bird, &Transform)>,
     columns: Query<(&Transform, &Sprite), With<Column>>,
     windows: Query<&Window>,
     game_state: Res<GameState>,
 ) {
     let window = windows.single().unwrap();
+    let text_justification = Justify::Center;
 
     for (mut bird, bird_transform) in &mut birds {
         if !bird.alive {
@@ -245,6 +250,28 @@ fn check_collisions(
             if x_overlap && y_overlap {
                 bird.alive = false;
                 bird.velocity = 0.0;
+
+                commands
+                    .spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            width: Val::Percent(100.0),
+                            height: Val::Percent(100.0),
+                            overflow: Overflow::visible(),
+                            ..default()
+                        },
+                        Transform::from_translation(Vec3::new(0.0, 0.0, 100.0)),
+                    ))
+                    .with_children(|builder| {
+                        builder.spawn((
+                            Text::new("Press any button to restart the game.".to_string()),
+                            TextFont::from_font_size(24.0),
+                            TextLayout::new_with_justify(text_justification).with_no_wrap(),
+                            TextRestartGame,
+                        ));
+                    });
                 break;
             }
         }
@@ -257,6 +284,7 @@ fn restart_game(
     birds: Query<(Entity, &Bird)>,
     columns: Query<Entity, With<Column>>,
     asset_server: Res<AssetServer>,
+    texts: Query<Entity, With<TextRestartGame>>,
     mut game_state: ResMut<GameState>,
 ) {
     let just_pressed_keys: Vec<KeyCode> = keyboard_input.get_just_pressed().cloned().collect();
@@ -264,8 +292,13 @@ fn restart_game(
 
     if !just_pressed_keys.is_empty() && !game_active {
         game_state.game_score = 0.0;
+
         for column_entity in &columns {
             commands.entity(column_entity).despawn();
+        }
+
+        for text_entity in &texts {
+            commands.entity(text_entity).despawn();
         }
 
         for (bird_entity, _) in &birds {
